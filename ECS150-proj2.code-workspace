@@ -4,5 +4,13 @@
 			"path": "."
 		}
 	],
-	"settings": {}
+	"settings": {
+		"files.associations": {
+			"__locale": "cpp",
+			"__string": "cpp",
+			"string": "cpp",
+			"string_view": "cpp",
+			"tuple": "cpp"
+		}
+	}
 }
