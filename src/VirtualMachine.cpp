@@ -18,10 +18,13 @@ extern "C"
         TVMThreadState state;
         TVMThreadEntry entry;
         SMachineContext context;
+        void* parm;
+        TVMThreadIDRef tid;
 
 
     };
 
+    // keep track the current number of thread
     volatile int threadNum = 0;
 
     // **************Globle variable **************
@@ -107,12 +110,29 @@ extern "C"
         if(!entry || !tid) return VM_STATUS_ERROR_INVALID_PARAMETER;
 
         TCB *thread = new TCB;
+        thread->entry = entry;
+        thread->parm = param;
+        thread->memorySize = memsize;
         thread->priority = prio;
-        thread->state = VM_THREAD_STATE_DEAD;
+        // thread->threadID = *tid++;
+        thread->threadID = threadNum++;
+
+
 
         return VM_STATUS_SUCCESS;
     }
 
+    /* description
+    VMThreadState() retrieves the state of the thread specified by thread and places the state in the location specified by state.
+    */
+    TVMStatus VMThreadState(TVMThreadID thread, TVMThreadStateRef state){
+
+        if(!thread) return VM_STATUS_ERROR_INVALID_ID;
+        if(!state) return VM_STATUS_ERROR_INVALID_PARAMETER;
+
+
+        return VM_STATUS_SUCCESS;
+    }
 
 
     // callback function for MachineFileWrite

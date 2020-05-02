@@ -11,7 +11,8 @@
 			"string": "cpp",
 			"string_view": "cpp",
 			"tuple": "cpp",
-			"queue": "cpp"
+			"queue": "cpp",
+			"thread": "cpp"
 		}
 	}
 }
