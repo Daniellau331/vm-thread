@@ -16,6 +16,8 @@ extern "C"
         TVMThreadID threadID;
         TVMThreadPriority priority;
         TVMThreadState state;
+        TVMThreadEntry entry;
+        
 
     };
 
@@ -25,15 +27,18 @@ extern "C"
     //May have a list of waiting threads, those that are waiting on sleep, or for a file operation
 
 
-    // TVMStatus VMStart(int tickms, int argc, char *argv[]);
-    // typedef void (*TVMMainEntry)(int, char *[]);
+    TVMStatus VMStart(int tickms, int argc, char *argv[]);
     TVMMainEntry VMLoadModule(const char *module);
-    // void MachineInitialize(void);
-    // void MachineEnableSignals(void);
-    // void MachineTerminate(void);
+    void MachineInitialize(void);
+    void MachineEnableSignals(void);
+    void MachineTerminate(void);
     void VMUnloadModule(void);
-    // TVMStatus VMFileWrite(int filedescriptor, void *data, int *length);
-    // typedef void (*TMachineFileCallback)(void *calldata, int result);
+    TVMStatus VMFileWrite(int filedescriptor, void *data, int *length);
+    typedef void (*TMachineFileCallback)(void *calldata, int result);
+    TVMStatus VMThreadCreate(TVMThreadEntry entry, void *param, TVMMemorySize memsize, TVMThreadPriority prio, TVMThreadIDRef tid);
+
+    //need a skeleton function to be the initial entry point for the thread
+
 
     //should start with VMStart and VMFileWrite
     TVMStatus VMStart(int tickms, int argc, char *argv[])
@@ -43,6 +48,13 @@ extern "C"
         idleThread->state = VM_THREAD_STATE_READY;
         idleThread->priority = VM_THREAD_PRIORITY_LOW;
         idleThread->threadID = 0;
+
+        // TCB for the main thread
+        TCB* mainThread = new TCB();
+        mainThread->threadID = 1;
+        mainThread->priority = VM_THREAD_PRIORITY_NORMAL;
+        mainThread->state = VM_THREAD_STATE_RUNNING;
+
 
 
 
@@ -72,6 +84,19 @@ extern "C"
         // 7. Return form VMStart
         return VM_STATUS_SUCCESS;
     }
+
+    // It creates a thread in the VM. 
+    TVMStatus VMThreadCreate(TVMThreadEntry entry, void *param, TVMMemorySize memsize, TVMThreadPriority prio, TVMThreadIDRef tid){
+        if(!entry || !tid) return VM_STATUS_ERROR_INVALID_PARAMETER;
+
+        TCB *thread = new TCB;
+        thread->priority = prio;
+        thread->state = VM_THREAD_STATE_DEAD;
+
+        return VM_STATUS_SUCCESS;
+    }
+
+
 
     // callback function for MachineFileWrite
     void writeCallback(void *calldata, int result)
