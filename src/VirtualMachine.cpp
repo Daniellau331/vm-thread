@@ -17,10 +17,15 @@ extern "C"
         TVMThreadPriority priority;
         TVMThreadState state;
         TVMThreadEntry entry;
-        
+        SMachineContext context;
+
 
     };
 
+    volatile int threadNum = 0;
+
+    // **************Globle variable **************
+    volatile int Globle_tick;
     //When a thread is ready, it should be added to the queues
     queue <TCB> ReadyThreadList;
 
@@ -36,25 +41,34 @@ extern "C"
     TVMStatus VMFileWrite(int filedescriptor, void *data, int *length);
     typedef void (*TMachineFileCallback)(void *calldata, int result);
     TVMStatus VMThreadCreate(TVMThreadEntry entry, void *param, TVMMemorySize memsize, TVMThreadPriority prio, TVMThreadIDRef tid);
+    void scheduler();
 
     //need a skeleton function to be the initial entry point for the thread
+
+    // Callback function for the MachineRequestAlarm
+    void alarmCallback(void* calldata){
+        Globle_tick--;
+        cout<<Globle_tick<<endl;
+    }
 
 
     //should start with VMStart and VMFileWrite
     TVMStatus VMStart(int tickms, int argc, char *argv[])
     {
+        cout<<"********VMStart********"<<endl;
+
+        // TCB for the main thread
+        TCB* mainThread = new TCB();
+        mainThread->threadID = threadNum++;
+        mainThread->priority = VM_THREAD_PRIORITY_NORMAL;
+        mainThread->state = VM_THREAD_STATE_RUNNING;
+        mainThread->memorySize = 0;
+
         //Create an idle thread, when all other thread are blocked
         TCB* idleThread = new TCB();
         idleThread->state = VM_THREAD_STATE_READY;
         idleThread->priority = VM_THREAD_PRIORITY_LOW;
-        idleThread->threadID = 0;
-
-        // TCB for the main thread
-        TCB* mainThread = new TCB();
-        mainThread->threadID = 1;
-        mainThread->priority = VM_THREAD_PRIORITY_NORMAL;
-        mainThread->state = VM_THREAD_STATE_RUNNING;
-
+        idleThread->threadID = threadNum++;
 
 
 
@@ -63,6 +77,9 @@ extern "C"
 
         // 2. Initialize the machine with MachineInitialize
         MachineInitialize();
+
+        TMachineAlarmCallback callback =  alarmCallback;
+        MachineRequestAlarm(tickms*1000,callback,NULL);
 
         // 3. Enable signials with MachineEnablesSignals
         MachineEnableSignals();
@@ -136,6 +153,16 @@ extern "C"
     {
         if (tick == VM_TIMEOUT_INFINITE) return VM_STATUS_ERROR_INVALID_PARAMETER;
 
+        Globle_tick = tick;
+        while (Globle_tick!=0);
+        
+        cout<<Globle_tick;
+
         return VM_STATUS_SUCCESS;
     }
+
+    void scheduler(){
+
+    }
+
 }
