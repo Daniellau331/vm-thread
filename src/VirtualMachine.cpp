@@ -2,6 +2,7 @@
 #include "Machine.h"
 #include <iostream>
 #include <queue>
+#include <vector>
 
 using namespace std;
 
@@ -23,6 +24,11 @@ extern "C"
 
 
     };
+
+    class AllThreadInfo{
+        public:
+            vector<TCB*> allThreadList;
+    }allThreadInfo;
 
     // keep track the current number of thread
     volatile int threadNum = 0;
@@ -66,12 +72,15 @@ extern "C"
         mainThread->priority = VM_THREAD_PRIORITY_NORMAL;
         mainThread->state = VM_THREAD_STATE_RUNNING;
         mainThread->memorySize = 0;
+        allThreadInfo.allThreadList.push_back(mainThread);
+        
 
         //Create an idle thread, when all other thread are blocked
         TCB* idleThread = new TCB();
         idleThread->state = VM_THREAD_STATE_READY;
         idleThread->priority = VM_THREAD_PRIORITY_LOW;
         idleThread->threadID = threadNum++;
+        allThreadInfo.allThreadList.push_back(idleThread);
 
 
 
@@ -130,7 +139,15 @@ extern "C"
         if(!thread) return VM_STATUS_ERROR_INVALID_ID;
         if(!state) return VM_STATUS_ERROR_INVALID_PARAMETER;
 
+        //there should be a data sturcture to hold all thread, and we need to iterate the list
+        //all threads are stored in allThreadInfo.
+        for (int i=0; i<allThreadInfo.allThreadList.size();i++){
+            if(allThreadInfo.allThreadList[i]->threadID==thread){
+                *state = allThreadInfo.allThreadList[i]->state;
+            }
+        }
 
+        
         return VM_STATUS_SUCCESS;
     }
 
