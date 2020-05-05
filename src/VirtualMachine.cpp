@@ -25,6 +25,7 @@ extern "C"
         void *stackAddr;
         string threadName;
         int sleep;
+        int descriptor;
     };
 
     // class AllThreadInfo
@@ -37,7 +38,7 @@ extern "C"
     // } allThreadInfo;
 
     //***************Global Variable//***************
-    volatile int threadNum ;
+    volatile int threadNum;
     volatile int Globle_tick;
     deque<TCB *> high_queue;
     deque<TCB *> normal_queue;
@@ -101,7 +102,7 @@ extern "C"
     void skeleton(void *param)
     {
         MachineEnableSignals();
-        cout<<"Skeleton"<<endl;
+        cout << "Skeleton" << endl;
         TCB *thread = (TCB *)param;
         thread->entry(thread->param);
         //program will be aborted if there is not thread termination
@@ -193,7 +194,6 @@ extern "C"
         newThread->tick = 0;
         newThread->threadName = "Newthread";
 
-        
         // *(newThread->threadID) = (TVMThreadID)allThread.size();
         *(newThread->threadID) = threadNum++;
         // cout<<"VMThreadCreate  id: "<<*(newThread->threadID)<<endl;
@@ -381,8 +381,7 @@ extern "C"
         // cout<<"size of the allthead "<<allThread.size()<<endl;
 
         TCB *activatingThread = allThread[thread];
-        cout<<"*activatingThread id: "<<activatingThread->threadName<<endl;
-        
+        cout << "*activatingThread id: " << activatingThread->threadName << endl;
 
         if (activatingThread->state != VM_THREAD_STATE_DEAD)
         {
@@ -393,7 +392,7 @@ extern "C"
 
         // activating the thread
         activatingThread->state = VM_THREAD_STATE_READY;
-        activatingThread->stackAddr =  new char[activatingThread->memorySize];
+        activatingThread->stackAddr = new char[activatingThread->memorySize];
         MachineContextCreate(&(activatingThread->context), skeleton, activatingThread, activatingThread->stackAddr, activatingThread->memorySize);
         if (activatingThread->priority == VM_THREAD_PRIORITY_HIGH)
         {
@@ -410,7 +409,7 @@ extern "C"
         // cout<<"can i get here"<<endl;
         //if the current thread is running and its priority is higher than the activating thread, we don't want to activate it right away
         if ((currentThread->state == VM_THREAD_STATE_RUNNING && currentThread->priority < activatingThread->priority) || currentThread->state != VM_THREAD_STATE_RUNNING)
-        scheduler();
+            scheduler();
         MachineResumeSignals(sigstate);
         return VM_STATUS_SUCCESS;
 
@@ -440,7 +439,7 @@ extern "C"
     }
 
     void schedule(deque<TCB *> &queue)
-    {   
+    {
         // cout<<"schedule"<<endl;
         // if the current thread is running or ready, they need to beomce ready and be pushed back to its queue
         if (currentThread->state == VM_THREAD_STATE_RUNNING || currentThread->state == VM_THREAD_STATE_READY)
@@ -460,7 +459,8 @@ extern "C"
                 low_queue.push_back(currentThread);
             }
         }
-        // printALLQueues();
+
+        //the current thread is sleeping
         if (currentThread->state == VM_THREAD_STATE_WAITING && currentThread->tick != 0)
         {
             currentThread->sleep = 1;
@@ -534,7 +534,6 @@ extern "C"
             //run the idle
             scheduleIdle();
         }
-    
 
         // //old machine context is the current thread's machine context
         // SMachineContextRef mcntxold = &(allThreadInfo.allThreadList[allThreadInfo.CurThreadID]->context);
@@ -548,24 +547,24 @@ extern "C"
         // MachineContextSwitch(mcntxold, mcntxnew);
     }
 
-    void printALLQueues(){
-        cout<<"PrintAllQueues"<<endl;
-        cout<<high_queue.size()<<endl;
-        cout<<normal_queue.size()<<endl;
-        cout<<low_queue.size()<<endl;
-        
-        // for(int i=0;i<high_queue.size();i++){
-        //     cout<<*high_queue[i]->threadID;
-        // }
-        // cout<<"normal_queue"<<endl;
-        // for(int i=0;i<normal_queue.size();i++){
-        //     cout<<*normal_queue[i]->threadID;
-        // }
-        // cout<<"low_queue"<<endl;
-        // for(int i=0;i<low_queue.size();i++){
-        //     cout<<*low_queue[i]->threadID;
-        // }
-    }
+    // void printALLQueues(){
+    //     cout<<"PrintAllQueues"<<endl;
+    //     cout<<high_queue.size()<<endl;
+    //     cout<<normal_queue.size()<<endl;
+    //     cout<<low_queue.size()<<endl;
+
+    // for(int i=0;i<high_queue.size();i++){
+    //     cout<<*high_queue[i]->threadID;
+    // }
+    // cout<<"normal_queue"<<endl;
+    // for(int i=0;i<normal_queue.size();i++){
+    //     cout<<*normal_queue[i]->threadID;
+    // }
+    // cout<<"low_queue"<<endl;
+    // for(int i=0;i<low_queue.size();i++){
+    //     cout<<*low_queue[i]->threadID;
+    // }
+    // }
 
     // void printThreadList()
     // {
@@ -574,4 +573,72 @@ extern "C"
     //         cout << "Thread ID: " << item->threadID << " state: " << item->state << endl;
     //     }
     // }
+
+    //	File operations structure from OH
+
+    void fileOpenCallback(void *param, int result)
+    {
+        TCB *thread = (TCB *)param;
+        thread->status = VM_THREAD_STATE_READY;
+        //result is the file descriptor of the newly opened file
+
+        thread->state = VM_THREAD_STATE_READY;
+        if (thread->priority == VM_THREAD_PRIORITY_HIGH)
+        {
+            high_queue.push_back(thread);
+        }
+        else if (thread->priority == VM_THREAD_PRIORITY_NORMAL)
+        {
+            normal_queue.push_back(thread);
+        }
+        else if (thread->priority == VM_THREAD_PRIORITY_LOW)
+        {
+            low_queue.push_back(thread);
+        }
+
+        thread->descriptor = result;
+        if (thread->state > currentThread->status)
+            scheduler();
+    }
+
+    // Opens and possibly creates a file in the file system
+    TVMStatus VMFileOpen(const char *filename, int flags, int mode, int *filedescriptor)
+    {
+        MachineSuspendSignals(sigstate);
+        if (!filename || !filedescriptor)
+        {
+            MachineResumeSignals(sigstate);
+            return VM_STATUS_ERROR_INVALID_PARAMETER;
+        }
+
+        //wait for the operation to complete
+        currentThread->state = VM_THREAD_STATE_WAITING;
+        MachineFileOpen(filename, flags, mode, fileOpenCallback, currentThread);
+        scheduler();
+        *filedescriptor = currentThread->descriptor;
+        MachineResumeSignals(sigstate);
+        if (*filedescriptor < 0)
+        {
+            return VM_STATUS_FAILURE;
+        }
+        else
+        {
+            return VM_STATUS_SUCCESS;
+        }
+    }
+    TVMStatus VMFileClose(int filedescriptor)
+    {
+    }
+    TVMStatus VMFileRead(int filedescriptor, void *data, int *length)
+    {
+    }
+    TVMStatus VMFileWrite(int filedescriptor, void *data, int *length)
+    {
+    }
+    TVMStatus VMFileSeek(int filedescriptor, int offset, int whence, int *newoffset)
+    {
+    }
+    TVMStatus VMFilePrint(int filedescriptor, const char *format, ...)
+    {
+    }
 }
