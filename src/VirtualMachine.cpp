@@ -160,7 +160,7 @@ extern "C"
             idleThread->tick = 0;
             idleThread->stackAddr = new char[idleThread->memorySize];
             idleThread->threadName = "idle";
-            allThread.push_back(idleThread);
+            // allThread.push_back(idleThread);
 
             MachineContextCreate(&(idleThread)->context, idleEntry, NULL, idleThread->stackAddr, idleThread->memorySize);
             globalIdleThread = idleThread;
@@ -211,7 +211,7 @@ extern "C"
     TVMStatus VMThreadState(TVMThreadID thread, TVMThreadStateRef stateRef)
     {
         MachineSuspendSignals(sigstate);
-        // cout<<"VMThreadState-------threadID "<<thread<<endl;
+        cout << "VMThreadState-------threadID " << thread << endl;
         if (!thread)
         {
             MachineResumeSignals(sigstate);
@@ -240,11 +240,6 @@ extern "C"
         // return VM_STATUS_SUCCESS;
     }
 
-    // callback function for MachineFileWrite
-    void writeCallback(void *calldata, int result)
-    {
-    }
-
     /*
     Description:
     VMFileWrite() attempts to write the number of bytes specified in the integer referenced by
@@ -254,6 +249,15 @@ extern "C"
     VMFileWrite() it blocks in the wait state VM_THREAD_STATE_WAITING until the either
     successful or unsuccessful writing of the file is completed.
     */
+
+    // TVMStatus VMFileWrite(int filedescriptor, void *data, int *length)
+    // {
+    //     if (!data || !length)
+    //         return VM_STATUS_ERROR_INVALID_PARAMETER;
+    //     TMachineFileCallback callback = writeCallback;
+    //     MachineFileWrite(filedescriptor, data, *length, callback, NULL);
+    //     return VM_STATUS_SUCCESS;
+    // }
 
     /*
     Description
@@ -450,8 +454,7 @@ extern "C"
                 low_queue.push_back(currentThread);
             }
         }
-
-        //the current thread is sleeping
+        // printALLQueues();
         if (currentThread->state == VM_THREAD_STATE_WAITING && currentThread->tick != 0)
         {
             currentThread->sleep = 1;
@@ -538,24 +541,25 @@ extern "C"
         // MachineContextSwitch(mcntxold, mcntxnew);
     }
 
-    // void printALLQueues(){
-    //     cout<<"PrintAllQueues"<<endl;
-    //     cout<<high_queue.size()<<endl;
-    //     cout<<normal_queue.size()<<endl;
-    //     cout<<low_queue.size()<<endl;
+    void printALLQueues()
+    {
+        cout << "PrintAllQueues" << endl;
+        cout << high_queue.size() << endl;
+        cout << normal_queue.size() << endl;
+        cout << low_queue.size() << endl;
 
-    // for(int i=0;i<high_queue.size();i++){
-    //     cout<<*high_queue[i]->threadID;
-    // }
-    // cout<<"normal_queue"<<endl;
-    // for(int i=0;i<normal_queue.size();i++){
-    //     cout<<*normal_queue[i]->threadID;
-    // }
-    // cout<<"low_queue"<<endl;
-    // for(int i=0;i<low_queue.size();i++){
-    //     cout<<*low_queue[i]->threadID;
-    // }
-    // }
+        // for(int i=0;i<high_queue.size();i++){
+        //     cout<<*high_queue[i]->threadID;
+        // }
+        // cout<<"normal_queue"<<endl;
+        // for(int i=0;i<normal_queue.size();i++){
+        //     cout<<*normal_queue[i]->threadID;
+        // }
+        // cout<<"low_queue"<<endl;
+        // for(int i=0;i<low_queue.size();i++){
+        //     cout<<*low_queue[i]->threadID;
+        // }
+    }
 
     // void printThreadList()
     // {
@@ -565,11 +569,11 @@ extern "C"
     //     }
     // }
 
-    //	File operations structure from OH
-
     void fileCallback(void *param, int result)
     {
         TCB *thread = (TCB *)param;
+        thread->status = VM_THREAD_STATE_READY;
+        //result is the file descriptor of the newly opened file
 
         thread->state = VM_THREAD_STATE_READY;
         if (thread->priority == VM_THREAD_PRIORITY_HIGH)
@@ -615,6 +619,7 @@ extern "C"
             return VM_STATUS_SUCCESS;
         }
     }
+
     TVMStatus VMFileClose(int filedescriptor)
     {
         MachineSuspendSignals(sigstate);
@@ -635,6 +640,26 @@ extern "C"
 
     TVMStatus VMFileRead(int filedescriptor, void *data, int *length)
     {
+        MachineSuspendSignals(sigstate);
+        if (!data || !length)
+        {
+            MachineResumeSignals(sigstate);
+            return VM_STATUS_ERROR_INVALID_PARAMETER;
+        }
+
+        currentThread->state = VM_THREAD_STATE_WAITING;
+        MachineFileRead(filedescriptor, data, *length, fileCallback, currentThread);
+        scheduler();
+        *length = currentThread->result;
+        MachineResumeSignals(sigstate);
+        if (currentThread->result < 0)
+        {
+            return VM_STATUS_FAILURE;
+        }
+        else
+        {
+            return VM_STATUS_SUCCESS;
+        }
     }
 
     TVMStatus VMFileWrite(int filedescriptor, void *data, int *length)
@@ -666,6 +691,21 @@ extern "C"
 
     TVMStatus VMFileSeek(int filedescriptor, int offset, int whence, int *newoffset)
     {
+
+        MachineSuspendSignals(sigstate);
+        currentThread->state = VM_THREAD_STATE_WAITING;
+        MachineFileSeek(filedescriptor, offset, whence, fileCallback, currentThread);
+        scheduler();
+        MachineResumeSignals(sigstate);
+
+        if (newoffset)
+        {
+            *newoffset = currentThread->result;
+            return VM_STATUS_SUCCESS;
+        }
+        else
+        {
+            return VM_STATUS_FAILURE;
+        }
     }
-    
 }
