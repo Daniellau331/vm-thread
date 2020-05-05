@@ -25,7 +25,7 @@ extern "C"
         void *stackAddr;
         string threadName;
         int sleep;
-        int descriptor;
+        int result;
     };
 
     // class AllThreadInfo
@@ -255,14 +255,7 @@ extern "C"
     successful or unsuccessful writing of the file is completed.
     */
 
-    TVMStatus VMFileWrite(int filedescriptor, void *data, int *length)
-    {
-        if (!data || !length)
-            return VM_STATUS_ERROR_INVALID_PARAMETER;
-        TMachineFileCallback callback = writeCallback;
-        MachineFileWrite(filedescriptor, data, *length, callback, NULL);
-        return VM_STATUS_SUCCESS;
-    }
+    
 
     /*
     Description
@@ -576,7 +569,7 @@ extern "C"
 
     //	File operations structure from OH
 
-    void fileOpenCallback(void *param, int result)
+    void fileCallback(void *param, int result)
     {
         TCB *thread = (TCB *)param;
         thread->status = VM_THREAD_STATE_READY;
@@ -596,8 +589,8 @@ extern "C"
             low_queue.push_back(thread);
         }
 
-        thread->descriptor = result;
-        if (thread->state > currentThread->status)
+        thread->result = result;
+        if (thread->priority > currentThread->priority)
             scheduler();
     }
 
@@ -613,9 +606,9 @@ extern "C"
 
         //wait for the operation to complete
         currentThread->state = VM_THREAD_STATE_WAITING;
-        MachineFileOpen(filename, flags, mode, fileOpenCallback, currentThread);
+        MachineFileOpen(filename, flags, mode, fileCallback, currentThread);
         scheduler();
-        *filedescriptor = currentThread->descriptor;
+        *filedescriptor = currentThread->result;
         MachineResumeSignals(sigstate);
         if (*filedescriptor < 0)
         {
@@ -628,13 +621,37 @@ extern "C"
     }
     TVMStatus VMFileClose(int filedescriptor)
     {
+        MachineSuspendSignals(sigstate);
+
+        currentThread->state = VM_THREAD_STATE_WAITING;
+        MachineFileClose(filedescriptor,fileCallback,currentThread);
+        scheduler();
+        MachineResumeSignals(sigstate);
+        if (currentThread->result < 0)
+        {
+            return VM_STATUS_FAILURE;
+        }
+        else
+        {
+            return VM_STATUS_SUCCESS;
+        }
     }
+
+
     TVMStatus VMFileRead(int filedescriptor, void *data, int *length)
     {
+
     }
+
     TVMStatus VMFileWrite(int filedescriptor, void *data, int *length)
     {
+        if (!data || !length)
+            return VM_STATUS_ERROR_INVALID_PARAMETER;
+        TMachineFileCallback callback = writeCallback;
+        MachineFileWrite(filedescriptor, data, *length, callback, NULL);
+        return VM_STATUS_SUCCESS;
     }
+    
     TVMStatus VMFileSeek(int filedescriptor, int offset, int whence, int *newoffset)
     {
     }
