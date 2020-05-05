@@ -7,5 +7,7 @@
 - https://stackoverflow.com/questions/4295432/typedef-function-pointer
 - https://en.wikipedia.org/wiki/Thread_control_block
 - https://www.geeksforgeeks.org/thread-control-block-in-operating-system/
-
+- https://en.wikipedia.org/wiki/Message_queue
+- http://man7.org/linux/man-pages/man1/ipcs.1.html
+- http://man7.org/linux/man-pages/man1/ipcrm.1.html
 - Piazza and OH videos

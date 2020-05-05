@@ -255,8 +255,6 @@ extern "C"
     successful or unsuccessful writing of the file is completed.
     */
 
-    
-
     /*
     Description
     VMThreadSleep() puts the currently running thread to sleep for tick ticks. If tick is specified as
@@ -572,8 +570,6 @@ extern "C"
     void fileCallback(void *param, int result)
     {
         TCB *thread = (TCB *)param;
-        thread->status = VM_THREAD_STATE_READY;
-        //result is the file descriptor of the newly opened file
 
         thread->state = VM_THREAD_STATE_READY;
         if (thread->priority == VM_THREAD_PRIORITY_HIGH)
@@ -624,7 +620,7 @@ extern "C"
         MachineSuspendSignals(sigstate);
 
         currentThread->state = VM_THREAD_STATE_WAITING;
-        MachineFileClose(filedescriptor,fileCallback,currentThread);
+        MachineFileClose(filedescriptor, fileCallback, currentThread);
         scheduler();
         MachineResumeSignals(sigstate);
         if (currentThread->result < 0)
@@ -637,25 +633,39 @@ extern "C"
         }
     }
 
-
     TVMStatus VMFileRead(int filedescriptor, void *data, int *length)
     {
-
     }
 
     TVMStatus VMFileWrite(int filedescriptor, void *data, int *length)
     {
+        // if (!data || !length)
+        //     return VM_STATUS_ERROR_INVALID_PARAMETER;
+        // TMachineFileCallback callback = writeCallback;
+        // MachineFileWrite(filedescriptor, data, *length, callback, NULL);
+        // return VM_STATUS_SUCCESS;
+        MachineSuspendSignals(sigstate);
         if (!data || !length)
+        {
+            MachineResumeSignals(sigstate);
             return VM_STATUS_ERROR_INVALID_PARAMETER;
-        TMachineFileCallback callback = writeCallback;
-        MachineFileWrite(filedescriptor, data, *length, callback, NULL);
-        return VM_STATUS_SUCCESS;
+        }
+        currentThread->state = VM_THREAD_STATE_WAITING;
+        MachineFileWrite(filedescriptor, data, *length, fileCallback, currentThread);
+        scheduler();
+        MachineResumeSignals(sigstate);
+        if (currentThread->result < 0)
+        {
+            return VM_STATUS_FAILURE;
+        }
+        else
+        {
+            return VM_STATUS_SUCCESS;
+        }
     }
-    
+
     TVMStatus VMFileSeek(int filedescriptor, int offset, int whence, int *newoffset)
     {
     }
-    TVMStatus VMFilePrint(int filedescriptor, const char *format, ...)
-    {
-    }
+    
 }
