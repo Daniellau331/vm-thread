@@ -10,4 +10,5 @@
 - https://en.wikipedia.org/wiki/Message_queue
 - http://man7.org/linux/man-pages/man1/ipcs.1.html
 - http://man7.org/linux/man-pages/man1/ipcrm.1.html
+- https://stackoverflow.com/questions/1553799/how-to-solve-msgget-no-space-left-on-device-error
 - Piazza and OH videos

@@ -97,3 +97,8 @@ clean_directories:
 	
 .PHONY: clean
 clean: clean_directories
+
+make remake:
+	make clean
+	make apps
+	make
