@@ -30,8 +30,10 @@ typedef unsigned int TVMMemorySize, *TVMMemorySizeRef;
 typedef unsigned int TVMStatus, *TVMStatusRef;
 typedef unsigned int TVMTick, *TVMTickRef;
 typedef unsigned int TVMThreadID, *TVMThreadIDRef;
+typedef unsigned int TVMMutexID, *TVMMutexIDRef;
 typedef unsigned int TVMThreadPriority, *TVMThreadPriorityRef;  
 typedef unsigned int TVMThreadState, *TVMThreadStateRef;  
+typedef unsigned int TVMMemoryPoolID, *TVMMemoryPoolIDRef;
 
 typedef void (*TVMMainEntry)(int, char*[]);
 typedef void (*TVMThreadEntry)(void *);
@@ -48,6 +50,12 @@ TVMStatus VMThreadTerminate(TVMThreadID thread);
 TVMStatus VMThreadID(TVMThreadIDRef threadref);
 TVMStatus VMThreadState(TVMThreadID thread, TVMThreadStateRef stateref);
 TVMStatus VMThreadSleep(TVMTick tick);
+
+TVMStatus VMMutexCreate(TVMMutexIDRef mutexref);
+TVMStatus VMMutexDelete(TVMMutexID mutex);
+TVMStatus VMMutexQuery(TVMMutexID mutex, TVMThreadIDRef ownerref);
+TVMStatus VMMutexAcquire(TVMMutexID mutex, TVMTick timeout);     
+TVMStatus VMMutexRelease(TVMMutexID mutex);
 
 #define VMPrint(format, ...)        VMFilePrint ( 1,  format, ##__VA_ARGS__)
 #define VMPrintError(format, ...)   VMFilePrint ( 2,  format, ##__VA_ARGS__)

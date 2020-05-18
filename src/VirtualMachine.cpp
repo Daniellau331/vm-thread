@@ -11,24 +11,35 @@ extern "C"
     // Thread Control Block
     class TCB
     {
-    public:
-        TVMMemorySize memorySize;
-        TVMStatus status;
-        TVMTick tick;
-        // TVMThreadID threadID;
-        TVMThreadPriority priority;
-        TVMThreadState state;
-        TVMThreadEntry entry;
-        SMachineContext context;
-        TVMThreadIDRef threadID;
-        void *param;
-        void *stackAddr;
-        string threadName;
-        int sleep;
-        int result;
+        public:
+            TVMMemorySize memorySize;
+            TVMStatus status;
+            TVMTick tick;
+            TVMThreadPriority priority;
+            TVMThreadState state;
+            TVMThreadEntry entry;
+            SMachineContext context;
+            SMachineContextRef contextRef;
+            TVMThreadIDRef threadID;
+            void *param;
+            void *stackAddr;
+            string threadName;
+            int sleep;
+            int result;
     };
 
-    //***************Global Variable//***************
+    class Mutex{
+        public:
+            // 1:unlocked , 0:locked
+            int state;
+            TVMMutexID mutexID;
+            TVMMutexIDRef mutexRef;
+            TCB* owner;
+            deque<TCB *> waiting_list;
+
+    }
+    vector<Mutex *> mutexes;
+
     volatile int threadNum;
     volatile int Global_tick = 0;
     volatile int tick_start;
@@ -39,7 +50,7 @@ extern "C"
     TCB *globalIdleThread;
     TVMThreadID currentThreadID;
     deque<TCB> ReadyThreadList;
-    TMachineSignalStateRef sigstate;
+    TMachineSignalState sigstate;
     vector<TCB *> allThread;
 
     //Function declaration
@@ -57,9 +68,9 @@ extern "C"
         // cout << "alarmCallback()" << endl;
         Global_tick++;
 
-        currentThread->state =VM_THREAD_STATE_READY;
+        currentThread->state = VM_THREAD_STATE_READY;
 
-        cout << "Global_tick: " << Global_tick << endl;
+        // cout << "Global_tick: " << Global_tick <<"theadID: "<<currentThread->threadID <<endl;
         for (int i = 0; i < allThread.size(); i++)
         {
             //sleep = 1 means sleeping thread
@@ -104,7 +115,6 @@ extern "C"
 
     void idleEntry(void *param)
     {
-
         while (1)
             ;
     }
@@ -150,7 +160,7 @@ extern "C"
             // (idleThread->context) = new SMachineContext;
             globalIdleThread = idleThread;
             //allThread.push_back(globalIdleThread);
-            std::cout << "allThread size: " << allThread.size() << "\n";
+            // std::cout << "allThread size: " << allThread.size() << "\n";
 
             MachineContextCreate(&(idleThread)->context, idleEntry, NULL, idleThread->stackAddr, idleThread->memorySize);
 
@@ -167,10 +177,10 @@ extern "C"
 
     TVMStatus VMThreadCreate(TVMThreadEntry entry, void *param, TVMMemorySize memsize, TVMThreadPriority prio, TVMThreadIDRef tid)
     {
-        // MachineSuspendSignals(sigstate);
+        MachineSuspendSignals(&sigstate);
         if (!entry || !tid)
         {
-            MachineResumeSignals(sigstate);
+            MachineResumeSignals(&sigstate);
             return VM_STATUS_ERROR_INVALID_PARAMETER;
         }
         TCB *newThread = new TCB;
@@ -182,76 +192,67 @@ extern "C"
         newThread->param = param;
         newThread->tick = 0;
         newThread->threadName = "Newthread";
-        newThread->threadID = tid;
+        newThread->contextRef = new SMachineContext;
         *(newThread->threadID) = (TVMThreadID)allThread.size();
+
         std::cout << "allThread size: " << allThread.size() << "\n";
         cout << "ThreadID: " << *(newThread->threadID) << endl;
+
         allThread.push_back(newThread);
-        MachineResumeSignals(sigstate);
+
+        MachineResumeSignals(&sigstate);
         return VM_STATUS_SUCCESS;
     }
 
     TVMStatus VMThreadState(TVMThreadID thread, TVMThreadStateRef stateRef)
     {
-        // MachineSuspendSignals(sigstate);
+        MachineSuspendSignals(&sigstate);
         // cout << "VMThreadState-------threadID " << thread << endl;
         if (!thread)
         {
-            MachineResumeSignals(sigstate);
+            MachineResumeSignals(&sigstate);
             return VM_STATUS_ERROR_INVALID_ID;
         }
         if (!stateRef)
         {
-            MachineResumeSignals(sigstate);
+            MachineResumeSignals(&sigstate);
             return VM_STATUS_ERROR_INVALID_PARAMETER;
         }
+
         *stateRef = allThread[thread]->state;
-        MachineResumeSignals(sigstate);
+
+        MachineResumeSignals(&sigstate);
         return VM_STATUS_SUCCESS;
     }
 
-    /*
-    Description
-    VMThreadSleep() puts the currently running thread to sleep for tick ticks. If tick is specified as
-    VM_TIMEOUT_IMMEDIATE the current process yields the remainder of its processing
-    quantum to the next ready process of equal priority.
-    */
-    // functions that I might need to use: MachineRequestAlarm
-    // I also need an IDLE thread if all threads were to be sleeping
-    // need to change the state of the current thread
     TVMStatus VMThreadSleep(TVMTick tick)
     {
-        // MachineSuspendSignals(sigstate);
+        MachineSuspendSignals(&sigstate);
 
         if (tick == VM_TIMEOUT_INFINITE)
         {
-            MachineResumeSignals(sigstate);
+            MachineResumeSignals(&sigstate);
             return VM_STATUS_ERROR_INVALID_PARAMETER;
         }
 
         currentThread->tick = tick;
         currentThread->state = VM_THREAD_STATE_WAITING;
+        currentThread->sleep = 1;
 
         //When this thread is sleeping, we need to schedue other thread
         scheduler();
-        MachineResumeSignals(sigstate);
+
+        MachineResumeSignals(&sigstate);
         return VM_STATUS_SUCCESS;
     }
 
-    /*
-    Description:
-    VMThreadTerminate() terminates the thread specified by thread parameter in the virtual machine. 
-    After termination the thread enters the state VM_THREAD_STATE_DEAD. The termination of a thread 
-    can trigger another thread to be scheduled.
-    */
     TVMStatus VMThreadTerminate(TVMThreadID thread)
     {
-        // MachineSuspendSignals(sigstate);
-        // bool found = false;
+        MachineSuspendSignals(&sigstate);
 
         if (!thread)
         {
-            MachineResumeSignals(sigstate);
+            MachineResumeSignals(&sigstate);
             return VM_STATUS_ERROR_INVALID_ID;
         }
         if (allThread[thread]->state != VM_THREAD_STATE_DEAD)
@@ -285,49 +286,41 @@ extern "C"
                 {
                     if ((*iter) == allThread[thread])
                     {
-                        std::cout << low_queue.size() << std::endl;
                         low_queue.erase(iter);
-                        std::cout << low_queue.size() << std::endl;
                         break;
                     }
                 }
             }
         }
         else
-        { //invalid state ( dead)
-            MachineResumeSignals(sigstate);
+        {
+            MachineResumeSignals(&sigstate);
             return VM_STATUS_ERROR_INVALID_STATE;
         }
 
         scheduler();
-        MachineResumeSignals(sigstate);
+        MachineResumeSignals(&sigstate);
+
         return VM_STATUS_SUCCESS;
     }
 
-    /*
-    Description:
-    VMThreadActivate() activates the dead thread specified by thread parameter in the virtual machine. 
-    After activation the thread enters the ready state VM_THREAD_STATE_READY, and must begin at the entry function specified.
-    */
-
     TVMStatus VMThreadActivate(TVMThreadID thread)
     {
-        // MachineSuspendSignals(sigstate);
+        MachineSuspendSignals(&sigstate);
 
         TCB *activatingThread = allThread[thread];
-        // cout << "*activatingThread id: " << activatingThread->threadName << endl;
 
         if (activatingThread->state != VM_THREAD_STATE_DEAD)
         {
-            MachineResumeSignals(sigstate);
+            MachineResumeSignals(&sigstate);
             return VM_STATUS_ERROR_INVALID_STATE;
         }
-        // cout<<"VMThreadActivate name: "<<thread<<endl;
 
         // activating the thread
         activatingThread->state = VM_THREAD_STATE_READY;
         activatingThread->stackAddr = new char[activatingThread->memorySize];
         MachineContextCreate(&(activatingThread->context), skeleton, activatingThread, activatingThread->stackAddr, activatingThread->memorySize);
+
         if (activatingThread->priority == VM_THREAD_PRIORITY_HIGH)
         {
             high_queue.push_back(activatingThread);
@@ -340,22 +333,26 @@ extern "C"
         {
             low_queue.push_back(activatingThread);
         }
+
         //if the current thread is running and its priority is higher than the activating thread, we don't want to activate it right away
-        if ((currentThread->state == VM_THREAD_STATE_RUNNING && currentThread->priority < activatingThread->priority) || currentThread->state != VM_THREAD_STATE_RUNNING)
+        // if ((currentThread->state == VM_THREAD_STATE_RUNNING && currentThread->priority < activatingThread->priority) || currentThread->state != VM_THREAD_STATE_RUNNING)
+        // {
+        //     scheduler();
+        // }
+
+        if (currentThread->priority < activatingThread->priority)
         {
             scheduler();
         }
 
-        MachineResumeSignals(sigstate);
+        MachineResumeSignals(&sigstate);
         return VM_STATUS_SUCCESS;
     }
 
     void schedule(deque<TCB *> &queue)
     {
-        if (currentThread->tick < 0)
-        {
-            std::cout << "ERROR IN NEGATIVE TICK\n";
-        }
+        // MachineSuspendSignals(&sigstate);
+
         if (currentThread->state == VM_THREAD_STATE_RUNNING || currentThread->state == VM_THREAD_STATE_READY)
         {
             currentThread->state = VM_THREAD_STATE_READY;
@@ -378,16 +375,21 @@ extern "C"
         }
 
         TCB *old = currentThread;
-        //get the fist item in the queue
         currentThread = queue.front();
         queue.pop_front();
         currentThread->state = VM_THREAD_STATE_RUNNING;
         MachineContextSwitch(&(old->context), &(currentThread->context));
+        MachineResumeSignals(&sigstate);
     }
 
     // When all other queuq are empty, we schedule the idle thread
     void scheduleIdle()
     {
+        // MachineSuspendSignals(sigstate);
+        // MachineSuspendSignals(&sigstate);
+
+        cout << "scheduleIdle()" << endl;
+
         if (currentThread->state == VM_THREAD_STATE_READY)
         {
             if (currentThread->priority == VM_THREAD_PRIORITY_HIGH)
@@ -403,7 +405,7 @@ extern "C"
                 low_queue.push_back(currentThread);
             }
         }
-        //waiting does not mean sleeping
+
         if (currentThread->state == VM_THREAD_STATE_WAITING && currentThread->tick != 0)
         {
             currentThread->sleep = 1;
@@ -414,11 +416,14 @@ extern "C"
         currentThread->state = VM_THREAD_STATE_RUNNING;
         allThread.push_back(currentThread);
         MachineContextSwitch(&(old->context), &(globalIdleThread->context));
+        // MachineResumeSignals(&sigstate);
     }
 
     // schedule other thread to run
     void scheduler()
     {
+
+        // MachineSuspendSignals(&sigstate);
 
         // cout<<"Scheduler()"<<endl;
         if (!high_queue.empty())
@@ -441,19 +446,15 @@ extern "C"
             scheduleIdle();
         }
 
-        return;
-    }
+        // MachineResumeSignals(&sigstate);
 
-    void printALLQueues()
-    {
-        cout << "PrintAllQueues" << endl;
-        cout << high_queue.size() << endl;
-        cout << normal_queue.size() << endl;
-        cout << low_queue.size() << endl;
+        return;
     }
 
     void fileCallback(void *param, int result)
     {
+
+        MachineSuspendSignals(&sigstate);
         TCB *thread = (TCB *)param;
         //result is the file descriptor of the newly opened file
 
@@ -472,17 +473,23 @@ extern "C"
         }
 
         thread->result = result;
-        if ((currentThread->state == VM_THREAD_STATE_RUNNING && currentThread->priority < thread->priority) || currentThread->state != VM_THREAD_STATE_RUNNING)
+        // if ((currentThread->state == VM_THREAD_STATE_RUNNING && currentThread->priority < thread->priority) || currentThread->state != VM_THREAD_STATE_RUNNING)
+        if (currentThread->priority < thread->priority)
+        {
+
             scheduler();
+        }
+
+        MachineResumeSignals(&sigstate);
     }
 
     // Opens and possibly creates a file in the file system
     TVMStatus VMFileOpen(const char *filename, int flags, int mode, int *filedescriptor)
     {
-        // MachineSuspendSignals(sigstate);
+        MachineSuspendSignals(&sigstate);
         if (!filename || !filedescriptor)
         {
-            MachineResumeSignals(sigstate);
+            MachineResumeSignals(&sigstate);
             return VM_STATUS_ERROR_INVALID_PARAMETER;
         }
 
@@ -491,7 +498,9 @@ extern "C"
         MachineFileOpen(filename, flags, mode, fileCallback, currentThread);
         scheduler();
         *filedescriptor = currentThread->result;
-        MachineResumeSignals(sigstate);
+
+        MachineResumeSignals(&sigstate);
+
         if (*filedescriptor < 0)
         {
             return VM_STATUS_FAILURE;
@@ -504,11 +513,13 @@ extern "C"
 
     TVMStatus VMFileClose(int filedescriptor)
     {
-        // MachineSuspendSignals(sigstate);
+        MachineSuspendSignals(&sigstate);
         currentThread->state = VM_THREAD_STATE_WAITING;
         MachineFileClose(filedescriptor, fileCallback, currentThread);
         scheduler();
-        MachineResumeSignals(sigstate);
+
+        MachineResumeSignals(&sigstate);
+
         if (currentThread->result < 0)
         {
             return VM_STATUS_FAILURE;
@@ -521,10 +532,10 @@ extern "C"
 
     TVMStatus VMFileRead(int filedescriptor, void *data, int *length)
     {
-        // MachineSuspendSignals(sigstate);
+        MachineSuspendSignals(&sigstate);
         if (!data || !length)
         {
-            MachineResumeSignals(sigstate);
+            MachineResumeSignals(&sigstate);
             return VM_STATUS_ERROR_INVALID_PARAMETER;
         }
 
@@ -532,7 +543,9 @@ extern "C"
         MachineFileRead(filedescriptor, data, *length, fileCallback, currentThread);
         scheduler();
         *length = currentThread->result;
-        MachineResumeSignals(sigstate);
+
+        MachineResumeSignals(&sigstate);
+
         if (currentThread->result < 0)
         {
             return VM_STATUS_FAILURE;
@@ -545,16 +558,18 @@ extern "C"
 
     TVMStatus VMFileWrite(int filedescriptor, void *data, int *length)
     {
-        
+        MachineSuspendSignals(&sigstate);
+
         if (!data || !length)
         {
-            MachineResumeSignals(sigstate);
+            MachineResumeSignals(&sigstate);
             return VM_STATUS_ERROR_INVALID_PARAMETER;
         }
         currentThread->state = VM_THREAD_STATE_WAITING;
         MachineFileWrite(filedescriptor, data, *length, fileCallback, currentThread);
         scheduler();
-        MachineResumeSignals(sigstate);
+
+        MachineResumeSignals(&sigstate);
         if (currentThread->result < 0)
         {
             return VM_STATUS_FAILURE;
@@ -568,11 +583,12 @@ extern "C"
     TVMStatus VMFileSeek(int filedescriptor, int offset, int whence, int *newoffset)
     {
 
-        // MachineSuspendSignals(sigstate);
+        MachineSuspendSignals(&sigstate);
         currentThread->state = VM_THREAD_STATE_WAITING;
         MachineFileSeek(filedescriptor, offset, whence, fileCallback, currentThread);
         scheduler();
-        MachineResumeSignals(sigstate);
+        // MachineResumeSignals(sigstate);
+        MachineResumeSignals(&sigstate);
 
         if (newoffset)
         {
@@ -588,40 +604,81 @@ extern "C"
     // Retrives milliseconds between ticks of the virtual machine
     TVMStatus VMTickMS(int *tickmsref)
     {
-        // MachineSuspendSignals(sigstate);
+        MachineSuspendSignals(&sigstate);
         //cout << "VMTickMS() ID: " << *currentThread->threadID << endl;
         if (!tickmsref)
         {
-            MachineResumeSignals(sigstate);
+            MachineResumeSignals(&sigstate);
             return VM_STATUS_ERROR_INVALID_PARAMETER;
         }
 
         *tickmsref = tick_start;
-        MachineResumeSignals(sigstate);
+
+        MachineResumeSignals(&sigstate);
         return VM_STATUS_SUCCESS;
     }
 
     TVMStatus VMTickCount(TVMTickRef tickref)
     {
+        MachineSuspendSignals(&sigstate);
+
         if (!tickref)
         {
-            MachineResumeSignals(sigstate);
+            MachineResumeSignals(&sigstate);
             return VM_STATUS_ERROR_INVALID_PARAMETER;
         }
         *tickref = Global_tick;
-        MachineResumeSignals(sigstate);
+        // cout<<"VMTickCount() thread--> "<<currentThread<<endl;
+        MachineResumeSignals(&sigstate);
         return VM_STATUS_SUCCESS;
     }
 
     TVMStatus VMThreadID(TVMThreadIDRef threadref)
     {
-        if (threadref == NULL)
-            return VM_STATUS_ERROR_INVALID_PARAMETER;
+        MachineSuspendSignals(&sigstate);
 
-        // MachineSuspendSignals(sigstate);
+        if (threadref == NULL)
+        {
+            MachineResumeSignals(&sigstate);
+            return VM_STATUS_ERROR_INVALID_PARAMETER;
+        }
+
         threadref = currentThread->threadID;
 
-        MachineResumeSignals(sigstate);
+        MachineResumeSignals(&sigstate);
+
         return VM_STATUS_SUCCESS;
+    }
+
+    TVMStatus VMMutexCreate(TVMMutexIDRef mutexref){
+        MachineSuspendSignals(&sigstate);
+        if(!mutexref){
+            MachineResumeSignals(&sigstate);
+            return VM_STATUS_ERROR_INVALID_PARAMETER;
+        }
+
+        //once created the mutex is in unlocked state
+        Mutex* newMutex = new Mutex;
+        newMutex->state = 0;
+        mutexes.push_back(newMutex);
+        newMutex->mutexID = mutexes.size();
+        newMutex->mutexRef = mutexref;
+        *mutexref = newMutex->mutexID;
+        
+
+        MachineResumeSignals(&sigstate);
+        return VM_STATUS_SUCCESS;
+    }
+    TVMStatus VMMutexDelete(TVMMutexID mutex){
+
+    }
+    TVMStatus VMMutexQuery(TVMMutexID mutex, TVMThreadIDRef ownerref){
+
+    }
+    TVMStatus VMMutexAcquire(TVMMutexID mutex, TVMTick timeout){
+
+    }
+    TVMStatus VMMutexRelease(TVMMutexID mutex){
+
     }
 }
