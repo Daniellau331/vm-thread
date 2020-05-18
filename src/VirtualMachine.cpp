@@ -11,34 +11,34 @@ extern "C"
     // Thread Control Block
     class TCB
     {
-        public:
-            TVMMemorySize memorySize;
-            TVMStatus status;
-            TVMTick tick;
-            TVMThreadPriority priority;
-            TVMThreadState state;
-            TVMThreadEntry entry;
-            SMachineContext context;
-            SMachineContextRef contextRef;
-            TVMThreadIDRef threadID;
-            void *param;
-            void *stackAddr;
-            string threadName;
-            int sleep;
-            int result;
+    public:
+        TVMMemorySize memorySize;
+        TVMStatus status;
+        TVMTick tick;
+        TVMThreadPriority priority;
+        TVMThreadState state;
+        TVMThreadEntry entry;
+        SMachineContext context;
+        SMachineContextRef contextRef;
+        TVMThreadIDRef threadID;
+        void *param;
+        void *stackAddr;
+        string threadName;
+        int sleep;
+        int result;
     };
 
-    class Mutex{
-        public:
-            // 1:unlocked , 0:locked
-            int state;
-            TVMMutexID mutexID;
-            TVMMutexIDRef mutexRef;
-            TCB* owner;
-            deque<TCB *> waiting_list;
+    class Mutex
+    {
+    public:
+        // 1:unlocked , 0:locked
+        int state;
+        TVMMutexID mutexID;
+        TVMMutexIDRef mutexRef;
+        TCB *owner;
+        deque<TCB *> waiting_list;
 
-    }
-    vector<Mutex *> mutexes;
+    } vector<Mutex *> mutexes;
 
     volatile int threadNum;
     volatile int Global_tick = 0;
@@ -650,35 +650,72 @@ extern "C"
         return VM_STATUS_SUCCESS;
     }
 
-    TVMStatus VMMutexCreate(TVMMutexIDRef mutexref){
+    TVMStatus VMMutexCreate(TVMMutexIDRef mutexref)
+    {
         MachineSuspendSignals(&sigstate);
-        if(!mutexref){
+        if (!mutexref)
+        {
             MachineResumeSignals(&sigstate);
             return VM_STATUS_ERROR_INVALID_PARAMETER;
         }
 
         //once created the mutex is in unlocked state
-        Mutex* newMutex = new Mutex;
-        newMutex->state = 0;
+        Mutex *newMutex = new Mutex;
+        //1: unlocked
+        newMutex->state = 1;
         mutexes.push_back(newMutex);
         newMutex->mutexID = mutexes.size();
         newMutex->mutexRef = mutexref;
         *mutexref = newMutex->mutexID;
-        
 
         MachineResumeSignals(&sigstate);
         return VM_STATUS_SUCCESS;
     }
-    TVMStatus VMMutexDelete(TVMMutexID mutex){
 
+    TVMStatus VMMutexDelete(TVMMutexID mutex)
+    {
+        MachineSuspendSignals(&sigstate);
+        for (int i = 0; i < mutexes.size(); i++)
+        {
+            if (mutexes[i]->mutexID == mutex)
+            {
+                //if it is locked, then return error
+                if (mutexes[i]->state == 0)
+                {
+                    MachineResumeSignals(&sigstate);
+                    return VM_STATUS_ERROR_INVALID_STATE;
+                }
+                else
+                {
+                    mutexes.erase(mutexes.begin() + i);
+                    MachineResumeSignals(&sigstate);
+                    return VM_STATUS_SUCCESS;
+                }
+            }
+        }
+
+        MachineResumeSignals(&sigstate);
+        return VM_STATUS_ERROR_INVALID_ID;
     }
-    TVMStatus VMMutexQuery(TVMMutexID mutex, TVMThreadIDRef ownerref){
+    TVMStatus VMMutexQuery(TVMMutexID mutex, TVMThreadIDRef ownerref)
+    {
+        MachineSuspendSignals(&sigstate);
 
+        MachineResumeSignals(&sigstate);
+        return VM_STATUS_SUCCESS;
     }
-    TVMStatus VMMutexAcquire(TVMMutexID mutex, TVMTick timeout){
+    TVMStatus VMMutexAcquire(TVMMutexID mutex, TVMTick timeout)
+    {
+        MachineSuspendSignals(&sigstate);
 
+        MachineResumeSignals(&sigstate);
+        return VM_STATUS_SUCCESS;
     }
-    TVMStatus VMMutexRelease(TVMMutexID mutex){
+    TVMStatus VMMutexRelease(TVMMutexID mutex)
+    {
+        MachineSuspendSignals(&sigstate);
 
+        MachineResumeSignals(&sigstate);
+        return VM_STATUS_SUCCESS;
     }
 }
