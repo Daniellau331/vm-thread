@@ -42,7 +42,9 @@ extern "C"
         deque<TCB *> normal_waiting_list;
         deque<TCB *> low_waiting_list;
 
-    } vector<Mutex *> mutexes;
+    };
+
+    vector<Mutex *> mutexes;
 
     volatile int threadNum;
     volatile int Global_tick = 0;
@@ -714,7 +716,7 @@ extern "C"
         {
             if (mutexes[i]->mutexID == mutex)
             {
-                ownerref = &(mutexes[i]->owner);
+                ownerref = mutexes[i]->owner->threadID;
                 MachineResumeSignals(&sigstate);
                 return VM_STATUS_SUCCESS;
             }
@@ -761,15 +763,15 @@ extern "C"
                         //push the thread into waiting queue
                         if (currentThread->priority == VM_THREAD_PRIORITY_HIGH)
                         {
-                            high_waiting_list.push_back(currentThread);
+                            mutexes[i]->high_waiting_list.push_back(currentThread);
                         }
                         else if (currentThread->priority == VM_THREAD_PRIORITY_NORMAL)
                         {
-                            normal_waiting_list.push_back(currentThread);
+                            mutexes[i]->normal_waiting_list.push_back(currentThread);
                         }
                         else if (currentThread->priority == VM_THREAD_PRIORITY_LOW)
                         {
-                            low_waiting_list.push_back(currentThread);
+                            mutexes[i]->low_waiting_list.push_back(currentThread);
                         }
 
                         scheduler();
@@ -803,15 +805,15 @@ extern "C"
                         //push the thread into waiting queue
                         if (currentThread->priority == VM_THREAD_PRIORITY_HIGH)
                         {
-                            high_waiting_list.push_back(currentThread);
+                            mutexes[i]->high_waiting_list.push_back(currentThread);
                         }
                         else if (currentThread->priority == VM_THREAD_PRIORITY_NORMAL)
                         {
-                            normal_waiting_list.push_back(currentThread);
+                            mutexes[i]->normal_waiting_list.push_back(currentThread);
                         }
                         else if (currentThread->priority == VM_THREAD_PRIORITY_LOW)
                         {
-                            low_waiting_list.push_back(currentThread);
+                            mutexes[i]->low_waiting_list.push_back(currentThread);
                         }
 
                         scheduler();
@@ -833,6 +835,59 @@ extern "C"
     TVMStatus VMMutexRelease(TVMMutexID mutex)
     {
         MachineSuspendSignals(&sigstate);
+
+        for (int i = 0; i < mutexes.size(); i++)
+        {
+            if (mutexes[i]->mutexID == mutex)
+            {
+                // if it is not locked, return error
+                if (mutexes[i]->state == 1)
+                {
+                    MachineResumeSignals(&sigstate);
+                    return VM_STATUS_ERROR_INVALID_STATE;
+                }
+                else
+                {
+                    //the mutex is locked
+                    //release the lock
+                    mutexes[i]->state = 1;
+
+                    //find the new holder from the waiting list
+                    if (!mutexes[i]->high_waiting_list.empty())
+                    {
+                        mutexes[i]->owner = mutexes[i]->high_waiting_list.front();
+                        mutexes[i]->high_waiting_list.pop_front();
+                        mutexes[i]->owner->mutexTick = 0;
+                        mutexes[i]->owner->state = VM_THREAD_STATE_READY;
+                        high_queue.push_back(mutexes[i]->owner);
+                        scheduler();
+                    }
+
+                    if (!mutexes[i]->normal_waiting_list.empty())
+                    {
+                        mutexes[i]->owner = mutexes[i]->normal_waiting_list.front();
+                        mutexes[i]->normal_waiting_list.pop_front();
+                        mutexes[i]->owner->mutexTick = 0;
+                        mutexes[i]->owner->state = VM_THREAD_STATE_READY;
+                        normal_queue.push_back(mutexes[i]->owner);
+                        scheduler();
+                    }
+
+                    if (!mutexes[i]->low_waiting_list.empty())
+                    {
+                        mutexes[i]->owner = mutexes[i]->low_waiting_list.front();
+                        mutexes[i]->low_waiting_list.pop_front();
+                        mutexes[i]->owner->mutexTick = 0;
+                        mutexes[i]->owner->state = VM_THREAD_STATE_READY;
+                        low_queue.push_back(mutexes[i]->owner);
+                        scheduler();
+                    }
+
+                    MachineResumeSignals(&sigstate);
+                    return VM_STATUS_SUCCESS;
+                }
+            }
+        }
 
         MachineResumeSignals(&sigstate);
         return VM_STATUS_ERROR_INVALID_ID;
