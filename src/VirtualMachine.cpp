@@ -26,6 +26,7 @@ extern "C"
         string threadName;
         int sleep;
         int result;
+        TVMTick mutexTick;
     };
 
     class Mutex
@@ -36,7 +37,10 @@ extern "C"
         TVMMutexID mutexID;
         TVMMutexIDRef mutexRef;
         TCB *owner;
-        deque<TCB *> waiting_list;
+        // deque<TCB *> waiting_list;
+        deque<TCB *> high_waiting_list;
+        deque<TCB *> normal_waiting_list;
+        deque<TCB *> low_waiting_list;
 
     } vector<Mutex *> mutexes;
 
@@ -722,15 +726,115 @@ extern "C"
     TVMStatus VMMutexAcquire(TVMMutexID mutex, TVMTick timeout)
     {
         MachineSuspendSignals(&sigstate);
+        bool locked = false;
+        for (int i = 0; i < mutexes.size(); i++)
+        {
+            if (mutexes[i]->state == 0)
+            {
+                locked = true;
+            }
+        }
+
+        for (int i = 0; i < mutexes.size(); i++)
+        {
+            if (mutexes[i]->mutexID == mutex)
+            {
+                if (timeout != VM_TIMEOUT_IMMEDIATE && timeout != VM_TIMEOUT_INFINITE)
+                {
+                    if (!locked)
+                    {
+                        //no one has the lock
+                        //then we can assign the lock
+                        mutexes[i]->state = 0;
+                        mutexes[i]->owner = currentThread;
+                        MachineResumeSignals(&sigstate);
+                        return VM_STATUS_SUCCESS;
+                    }
+                    else
+                    {
+                        //other thread has the lock
+                        //put the current thread into sleep
+                        currentThread->mutexTick = timeout;
+
+                        currentThread->state = VM_THREAD_STATE_WAITING;
+
+                        //push the thread into waiting queue
+                        if (currentThread->priority == VM_THREAD_PRIORITY_HIGH)
+                        {
+                            high_waiting_list.push_back(currentThread);
+                        }
+                        else if (currentThread->priority == VM_THREAD_PRIORITY_NORMAL)
+                        {
+                            normal_waiting_list.push_back(currentThread);
+                        }
+                        else if (currentThread->priority == VM_THREAD_PRIORITY_LOW)
+                        {
+                            low_waiting_list.push_back(currentThread);
+                        }
+
+                        scheduler();
+                    }
+                }
+                else if (timeout == VM_TIMEOUT_IMMEDIATE)
+                {
+                    //the current returns immdiately if the mutex is already locked
+                    if (locked)
+                    {
+                        MachineResumeSignals(&sigstate);
+                        return VM_STATUS_FAILURE;
+                    }
+                    else
+                    {
+                        mutexes[i]->state = 0;
+                        mutexes[i]->owner = currentThread;
+                        MachineResumeSignals(&sigstate);
+                        return VM_STATUS_SUCCESS;
+                    }
+                }
+                else if (timeout == VM_TIMEOUT_INFINITE)
+                {
+                    //the thread will block until the mutex is acquired.
+                    if (locked)
+                    {
+                        currentThread->mutexTick = -9999;
+
+                        currentThread->state = VM_THREAD_STATE_WAITING;
+
+                        //push the thread into waiting queue
+                        if (currentThread->priority == VM_THREAD_PRIORITY_HIGH)
+                        {
+                            high_waiting_list.push_back(currentThread);
+                        }
+                        else if (currentThread->priority == VM_THREAD_PRIORITY_NORMAL)
+                        {
+                            normal_waiting_list.push_back(currentThread);
+                        }
+                        else if (currentThread->priority == VM_THREAD_PRIORITY_LOW)
+                        {
+                            low_waiting_list.push_back(currentThread);
+                        }
+
+                        scheduler();
+                    }
+                    else
+                    {
+                        mutexes[i]->state = 0;
+                        mutexes[i]->owner = currentThread;
+                        MachineResumeSignals(&sigstate);
+                        return VM_STATUS_SUCCESS;
+                    }
+                }
+            }
+        }
 
         MachineResumeSignals(&sigstate);
-        return VM_STATUS_SUCCESS;
+        return VM_STATUS_ERROR_INVALID_ID;
     }
     TVMStatus VMMutexRelease(TVMMutexID mutex)
     {
         MachineSuspendSignals(&sigstate);
 
         MachineResumeSignals(&sigstate);
-        return VM_STATUS_SUCCESS;
+        return VM_STATUS_ERROR_INVALID_ID;
     }
 }
