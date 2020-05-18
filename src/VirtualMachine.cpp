@@ -41,7 +41,6 @@ extern "C"
         deque<TCB *> high_waiting_list;
         deque<TCB *> normal_waiting_list;
         deque<TCB *> low_waiting_list;
-
     };
 
     vector<Mutex *> mutexes;
@@ -103,10 +102,58 @@ extern "C"
                     }
                     //the thread need to wake up
                     allThread[i]->sleep = 0;
-                    scheduler();
                 }
             }
         }
+
+        //Mutex tick
+        for(int i=0;i<mutexes.size();i++){
+            if(!mutexes[i]->high_waiting_list.empty()){
+                for(int j=0;j<mutexes[i]->high_waiting_list.size();j++){
+                    TCB* i_thread =  mutexes[i]->high_waiting_list.front();
+                    if(i_thread->mutexTick!=-9999){
+                        i_thread->mutexTick--;
+                        if(i_thread->mutexTick == 0){
+                            mutexes[i]->high_waiting_list.pop_front();
+                            i_thread->state = VM_THREAD_STATE_READY;
+                            high_queue.push_back(i_thread);
+                        }
+                    }
+                }
+            }
+
+            if(!mutexes[i]->normal_waiting_list.empty()){
+                for(int j=0;j<mutexes[i]->normal_waiting_list.size();j++){
+                    TCB* i_thread =  mutexes[i]->normal_waiting_list.front();
+                    if(i_thread->mutexTick!=-9999){
+                        i_thread->mutexTick--;
+                        if(i_thread->mutexTick == 0){
+                            mutexes[i]->normal_waiting_list.pop_front();
+                            i_thread->state = VM_THREAD_STATE_READY;
+                            normal_queue.push_back(i_thread);
+                        }
+                    }
+                }
+            }
+
+            if(!mutexes[i]->low_waiting_list.empty()){
+                for(int j=0;j<mutexes[i]->low_waiting_list.size();j++){
+                    TCB* i_thread =  mutexes[i]->low_waiting_list.front();
+                    if(i_thread->mutexTick!=-9999){
+                        i_thread->mutexTick--;
+                        if(i_thread->mutexTick == 0){
+                            mutexes[i]->low_waiting_list.pop_front();
+                            i_thread->state = VM_THREAD_STATE_READY;
+                            low_queue.push_back(i_thread);
+                        }
+                    }
+                }
+            }
+
+
+        }
+
+        scheduler();
     }
 
     // use this funciton to call the threads entry and ThreadTerminate in case the
@@ -201,8 +248,8 @@ extern "C"
         newThread->contextRef = new SMachineContext;
         *(newThread->threadID) = (TVMThreadID)allThread.size();
 
-        std::cout << "allThread size: " << allThread.size() << "\n";
-        cout << "ThreadID: " << *(newThread->threadID) << endl;
+        // std::cout << "allThread size: " << allThread.size() << "\n";
+        // cout << "ThreadID: " << *(newThread->threadID) << endl;
 
         allThread.push_back(newThread);
 
@@ -394,7 +441,7 @@ extern "C"
         // MachineSuspendSignals(sigstate);
         // MachineSuspendSignals(&sigstate);
 
-        cout << "scheduleIdle()" << endl;
+        // cout << "scheduleIdle()" << endl;
 
         if (currentThread->state == VM_THREAD_STATE_READY)
         {
@@ -674,6 +721,8 @@ extern "C"
         newMutex->mutexRef = mutexref;
         *mutexref = newMutex->mutexID;
 
+        // cout<<"mutexref"<<*mutexref<<endl;
+
         MachineResumeSignals(&sigstate);
         return VM_STATUS_SUCCESS;
     }
@@ -728,14 +777,15 @@ extern "C"
     TVMStatus VMMutexAcquire(TVMMutexID mutex, TVMTick timeout)
     {
         MachineSuspendSignals(&sigstate);
-        bool locked = false;
-        for (int i = 0; i < mutexes.size(); i++)
-        {
-            if (mutexes[i]->state == 0)
-            {
-                locked = true;
-            }
-        }
+        // cout<<"VMMutexAcquire() id: "<<mutex<<endl;
+        // bool locked = false;
+        // for (int i = 0; i < mutexes.size(); i++)
+        // {
+        //     if (mutexes[i]->state == 0)
+        //     {
+        //         locked = true;
+        //     }
+        // }
 
         for (int i = 0; i < mutexes.size(); i++)
         {
@@ -743,7 +793,7 @@ extern "C"
             {
                 if (timeout != VM_TIMEOUT_IMMEDIATE && timeout != VM_TIMEOUT_INFINITE)
                 {
-                    if (!locked)
+                    if (mutexes[i]->state == 1)
                     {
                         //no one has the lock
                         //then we can assign the lock
@@ -780,7 +830,7 @@ extern "C"
                 else if (timeout == VM_TIMEOUT_IMMEDIATE)
                 {
                     //the current returns immdiately if the mutex is already locked
-                    if (locked)
+                    if (mutexes[i]->state == 0)
                     {
                         MachineResumeSignals(&sigstate);
                         return VM_STATUS_FAILURE;
@@ -795,9 +845,11 @@ extern "C"
                 }
                 else if (timeout == VM_TIMEOUT_INFINITE)
                 {
+                    // cout<<"VM_TIMEOUT_INFINITE"<<endl;
                     //the thread will block until the mutex is acquired.
-                    if (locked)
+                    if (mutexes[i]->state == 0)
                     {
+                        // cout<<"Cannot get the lock"<<endl;
                         currentThread->mutexTick = -9999;
 
                         currentThread->state = VM_THREAD_STATE_WAITING;
@@ -820,6 +872,7 @@ extern "C"
                     }
                     else
                     {
+                        // cout<<"Got the lock"<<endl;
                         mutexes[i]->state = 0;
                         mutexes[i]->owner = currentThread;
                         MachineResumeSignals(&sigstate);
@@ -886,6 +939,25 @@ extern "C"
                     MachineResumeSignals(&sigstate);
                     return VM_STATUS_SUCCESS;
                 }
+            }
+        }
+
+        MachineResumeSignals(&sigstate);
+        return VM_STATUS_ERROR_INVALID_ID;
+    }
+
+    TVMStatus VMThreadDelete(TVMThreadID thread){
+        MachineSuspendSignals(&sigstate);
+
+        for(int i=0; i<allThread.size(); i++){
+            if(*(allThread[i]->threadID) == thread){
+                if(allThread[i]->state !=  VM_THREAD_STATE_DEAD){
+                    MachineResumeSignals(&sigstate);
+                    return VM_STATUS_ERROR_INVALID_STATE;
+                }
+                allThread.erase(allThread.begin()+i);
+                MachineResumeSignals(&sigstate);
+                return VM_STATUS_SUCCESS;
             }
         }
 
