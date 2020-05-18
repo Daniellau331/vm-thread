@@ -700,9 +700,24 @@ extern "C"
     TVMStatus VMMutexQuery(TVMMutexID mutex, TVMThreadIDRef ownerref)
     {
         MachineSuspendSignals(&sigstate);
+        if (!ownerref)
+        {
+            MachineResumeSignals(&sigstate);
+            return VM_STATUS_ERROR_INVALID_PARAMETER;
+        }
+
+        for (int i = 0; i < mutexes.size(); i++)
+        {
+            if (mutexes[i]->mutexID == mutex)
+            {
+                ownerref = &(mutexes[i]->owner);
+                MachineResumeSignals(&sigstate);
+                return VM_STATUS_SUCCESS;
+            }
+        }
 
         MachineResumeSignals(&sigstate);
-        return VM_STATUS_SUCCESS;
+        return VM_STATUS_ERROR_INVALID_ID;
     }
     TVMStatus VMMutexAcquire(TVMMutexID mutex, TVMTick timeout)
     {
