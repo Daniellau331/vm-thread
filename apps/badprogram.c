@@ -106,11 +106,16 @@ void VMMain(int argc, char *argv[]){
         VMPrint("VMThreadTerminate doesn't handle bad thead.\n");    
         return;
     }
+
+    VMPrint("1\n");
     if(VM_STATUS_ERROR_INVALID_STATE != VMThreadTerminate(OtherThreadID)){
         VMPrint("VMThreadTerminate doesn't handle dead thead.\n");    
         return;
     }
+    VMPrint("2\n");
+
     VMPrint("VMMain VMThreadTerminate appears OK.\n");
+    
     VMPrint("VMMain testing VMMutexCreate.\n");
     if(VM_STATUS_ERROR_INVALID_PARAMETER != VMMutexCreate(NULL)){
         VMPrint("VMMutexCreate doesn't handle NULL mutexref.\n");    

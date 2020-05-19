@@ -348,53 +348,73 @@ extern "C"
             MachineResumeSignals(&sigstate);
             return VM_STATUS_ERROR_INVALID_ID;
         }
-        if (allThread[thread]->state != VM_THREAD_STATE_DEAD)
-        { //remove the dead thread from the queue
-            allThread[thread]->state = VM_THREAD_STATE_DEAD;
-            if (allThread[thread]->priority == VM_THREAD_PRIORITY_HIGH)
-            {
-                for (deque<TCB *>::iterator iter = high_queue.begin(); iter != high_queue.end(); iter++)
-                {
-                    if ((*iter) == allThread[thread])
-                    {
-                        high_queue.erase(iter);
-                        break;
-                    }
-                }
-            }
-            else if (allThread[thread]->priority == VM_THREAD_PRIORITY_NORMAL)
-            {
-                for (deque<TCB *>::iterator iter = normal_queue.begin(); iter != normal_queue.end(); iter++)
-                {
-                    if ((*iter) == allThread[thread])
-                    {
-                        normal_queue.erase(iter);
-                        break;
-                    }
-                }
-            }
-            else if (allThread[thread]->priority == VM_THREAD_PRIORITY_LOW)
-            {
-                for (deque<TCB *>::iterator iter = low_queue.begin(); iter != low_queue.end(); iter++)
-                {
-                    if ((*iter) == allThread[thread])
-                    {
-                        low_queue.erase(iter);
-                        break;
-                    }
-                }
-            }
-        }
-        else
-        {
-            MachineResumeSignals(&sigstate);
-            return VM_STATUS_ERROR_INVALID_STATE;
+
+        // if (allThread[thread]->state != VM_THREAD_STATE_DEAD)
+        // { //remove the dead thread from the queue
+        //     allThread[thread]->state = VM_THREAD_STATE_DEAD;
+        //     if (allThread[thread]->priority == VM_THREAD_PRIORITY_HIGH)
+        //     {
+        //         for (deque<TCB *>::iterator iter = high_queue.begin(); iter != high_queue.end(); iter++)
+        //         {
+        //             if ((*iter) == allThread[thread])
+        //             {
+        //                 high_queue.erase(iter);
+        //                 break;
+        //             }
+        //         }
+        //     }
+        //     else if (allThread[thread]->priority == VM_THREAD_PRIORITY_NORMAL)
+        //     {
+        //         for (deque<TCB *>::iterator iter = normal_queue.begin(); iter != normal_queue.end(); iter++)
+        //         {
+        //             if ((*iter) == allThread[thread])
+        //             {
+        //                 normal_queue.erase(iter);
+        //                 break;
+        //             }
+        //         }
+        //     }
+        //     else if (allThread[thread]->priority == VM_THREAD_PRIORITY_LOW)
+        //     {
+        //         for (deque<TCB *>::iterator iter = low_queue.begin(); iter != low_queue.end(); iter++)
+        //         {
+        //             if ((*iter) == allThread[thread])
+        //             {
+        //                 low_queue.erase(iter);
+        //                 break;
+        //             }
+        //         }
+        //     }
+        // }
+        // else
+        // {
+        //     MachineResumeSignals(&sigstate);
+        //     return VM_STATUS_ERROR_INVALID_STATE;
+        // }
+
+        // scheduler();
+
+        if(currentThread->threadID == thread){
+            currentThread->state = VM_THREAD_STATE_DEAD;
+            scheduler();
         }
 
-        scheduler();
+        for(int i =0; i<allThread.size(); i++){
+            if(allThread[i]->threadID == thread){
+                if(allThread[i]->state == VM_THREAD_STATE_DEAD){
+                    MachineResumeSignals(&sigstate);
+                    return VM_STATUS_ERROR_INVALID_STATE;
+                }
+                allThread[i]->state = VM_THREAD_STATE_DEAD;
+                MachineResumeSignals(&sigstate);
+                return VM_STATUS_SUCCESS;
+            }
+        }
+
+
         MachineResumeSignals(&sigstate);
 
-        return VM_STATUS_SUCCESS;
+        return VM_STATUS_ERROR_INVALID_ID;
     }
 
     TVMStatus VMThreadActivate(TVMThreadID thread)
