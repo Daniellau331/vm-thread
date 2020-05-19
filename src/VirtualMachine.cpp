@@ -20,7 +20,8 @@ extern "C"
         TVMThreadEntry entry;
         SMachineContext context;
         SMachineContextRef contextRef;
-        TVMThreadIDRef threadID;
+        TVMThreadIDRef threadIDRef;
+        TVMThreadID threadID;
         void *param;
         void *stackAddr;
         string threadName;
@@ -163,7 +164,7 @@ extern "C"
         MachineEnableSignals();
         TCB *thread = (TCB *)param;
         thread->entry(thread->param);
-        VMThreadTerminate(*(thread->threadID));
+        VMThreadTerminate(thread->threadID);
     }
 
     void idleEntry(void *param)
@@ -187,7 +188,8 @@ extern "C"
 
             //create main thread
             TCB *mainThread = new TCB;
-            mainThread->threadID = (TVMThreadIDRef)0;
+            mainThread->threadID = 0;
+            mainThread->threadIDRef = &mainThread->threadID;
             mainThread->state = VM_THREAD_STATE_RUNNING;
             mainThread->priority = VM_THREAD_PRIORITY_NORMAL;
             mainThread->memorySize = 0;
@@ -201,7 +203,8 @@ extern "C"
 
             //Create idle thread
             TCB *idleThread = new TCB;
-            idleThread->threadID = (TVMThreadIDRef)1;
+            idleThread->threadID = 1;
+            idleThread->threadIDRef = &idleThread->threadID;
             idleThread->state = VM_THREAD_STATE_READY;
             idleThread->priority = (TVMThreadPriority)0x00;
             idleThread->memorySize = 0x100000;
@@ -237,7 +240,8 @@ extern "C"
             return VM_STATUS_ERROR_INVALID_PARAMETER;
         }
         TCB *newThread = new TCB;
-        newThread->threadID = tid;
+        newThread->threadIDRef = tid;
+        *(newThread->threadIDRef) = (TVMThreadID)allThread.size();
         newThread->state = VM_THREAD_STATE_DEAD;
         newThread->priority = prio;
         newThread->memorySize = memsize;
@@ -246,7 +250,7 @@ extern "C"
         newThread->tick = 0;
         newThread->threadName = "Newthread";
         newThread->contextRef = new SMachineContext;
-        *(newThread->threadID) = (TVMThreadID)allThread.size();
+        newThread->threadID = (TVMThreadID)allThread.size();
 
         // std::cout << "allThread size: " << allThread.size() << "\n";
         // cout << "ThreadID: " << *(newThread->threadID) << endl;
@@ -259,23 +263,59 @@ extern "C"
 
     TVMStatus VMThreadState(TVMThreadID thread, TVMThreadStateRef stateRef)
     {
+        // MachineSuspendSignals(&sigstate);
+        // if (!thread)
+        // {
+        //     MachineResumeSignals(&sigstate);
+        //     return VM_STATUS_ERROR_INVALID_ID;
+        // }
+        // if (!stateRef)
+        // {
+        //     MachineResumeSignals(&sigstate);
+        //     return VM_STATUS_ERROR_INVALID_PARAMETER;
+        // }
+
+        // *stateRef = allThread[thread]->state;
+
+        // MachineResumeSignals(&sigstate);
+        // return VM_STATUS_SUCCESS;
         MachineSuspendSignals(&sigstate);
-        // cout << "VMThreadState-------threadID " << thread << endl;
-        if (!thread)
-        {
-            MachineResumeSignals(&sigstate);
-            return VM_STATUS_ERROR_INVALID_ID;
-        }
-        if (!stateRef)
-        {
+        // cout<<"VMThreadState()"<<endl;
+        // cout<<"Thread ID: "<<thread<<endl;
+        // cout<<"allThread.size "<<allThread.size()<<endl;
+
+
+        if(!stateRef){
+            cout<<"stateRef == NULL"<<endl;
             MachineResumeSignals(&sigstate);
             return VM_STATUS_ERROR_INVALID_PARAMETER;
         }
 
-        *stateRef = allThread[thread]->state;
+        if(thread>allThread.size()){
+            cout<<"VM_STATUS_ERROR_INVALID_ID"<<endl;
+            MachineResumeSignals(&sigstate);
+            return VM_STATUS_ERROR_INVALID_ID;
+        }
 
+        // for(int i=0;i<allThread.size();i++){
+        //     cout<<"loop id: "<<i<<endl;
+        // }
+
+
+        for(int i=0;i<allThread.size();i++){
+            // cout<<"loop id: "<<i<<endl;
+            if(allThread[i]->threadID == thread){
+                // cout<<"found id == "<<thread<<endl;
+                *stateRef = allThread[i]->state;
+                MachineResumeSignals(&sigstate);
+                return VM_STATUS_SUCCESS;
+            }
+        }
+
+        cout<<"VM_STATUS_ERROR_INVALID_ID"<<endl;
         MachineResumeSignals(&sigstate);
-        return VM_STATUS_SUCCESS;
+        return VM_STATUS_ERROR_INVALID_ID;
+
     }
 
     TVMStatus VMThreadSleep(TVMTick tick)
@@ -361,6 +401,8 @@ extern "C"
     {
         MachineSuspendSignals(&sigstate);
 
+        cout<<"VMThreadActivate()"<<endl;
+
         TCB *activatingThread = allThread[thread];
 
         if (activatingThread->state != VM_THREAD_STATE_DEAD)
@@ -443,7 +485,7 @@ extern "C"
 
         // cout << "scheduleIdle()" << endl;
 
-        if (currentThread->state == VM_THREAD_STATE_READY)
+        if (currentThread->state == VM_THREAD_STATE_READY || currentThread->state == VM_THREAD_STATE_RUNNING)
         {
             if (currentThread->priority == VM_THREAD_PRIORITY_HIGH)
             {
@@ -467,7 +509,7 @@ extern "C"
         TCB *old = currentThread;
         currentThread = globalIdleThread;
         currentThread->state = VM_THREAD_STATE_RUNNING;
-        allThread.push_back(currentThread);
+        // allThread.push_back(currentThread);
         MachineContextSwitch(&(old->context), &(globalIdleThread->context));
         // MachineResumeSignals(&sigstate);
     }
@@ -696,7 +738,7 @@ extern "C"
             return VM_STATUS_ERROR_INVALID_PARAMETER;
         }
 
-        threadref = currentThread->threadID;
+        threadref = currentThread->threadIDRef;
 
         MachineResumeSignals(&sigstate);
 
@@ -765,7 +807,7 @@ extern "C"
         {
             if (mutexes[i]->mutexID == mutex)
             {
-                ownerref = mutexes[i]->owner->threadID;
+                ownerref = mutexes[i]->owner->threadIDRef;
                 MachineResumeSignals(&sigstate);
                 return VM_STATUS_SUCCESS;
             }
@@ -950,7 +992,7 @@ extern "C"
         MachineSuspendSignals(&sigstate);
 
         for(int i=0; i<allThread.size(); i++){
-            if(*(allThread[i]->threadID) == thread){
+            if(allThread[i]->threadID == thread){
                 if(allThread[i]->state !=  VM_THREAD_STATE_DEAD){
                     MachineResumeSignals(&sigstate);
                     return VM_STATUS_ERROR_INVALID_STATE;

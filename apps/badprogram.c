@@ -50,22 +50,31 @@ void VMMain(int argc, char *argv[]){
     BadThreadID = (OtherThreadID > ThisThreadID ? OtherThreadID : ThisThreadID) + 16;
     VMPrint("VMMain VMThreadID appears OK.\n");
     VMPrint("VMMain testing VMThreadState.\n");
+    // VMPrint("0");
     if(VM_STATUS_ERROR_INVALID_PARAMETER != VMThreadState(OtherThreadID, NULL)){
         VMPrint("VMThreadState doesn't handle NULL state.\n");    
         return;
     }
+        // VMPrint("1\n");
+
     if(VM_STATUS_ERROR_INVALID_ID != VMThreadState(BadThreadID, &VMState)){
         VMPrint("VMThreadState doesn't handle bad thread.\n");    
         return;
     }
+        // VMPrint("2\n");
+
     if(VM_STATUS_SUCCESS != VMThreadState(OtherThreadID, &VMState)){
         VMPrint("VMThreadState doesn't handle valid inputs.\n");    
         return;
     }
+        // VMPrint("3\n");
+
     if(VM_THREAD_STATE_DEAD != VMState){
         VMPrint("VMThreadState returned the wrong value for state.\n");    
         return;        
     }
+        // VMPrint("4\n");
+
     VMPrint("VMMain VMThreadState appears OK.\n");
     VMPrint("VMMain testing VMTickMS.\n");
     if(VM_STATUS_ERROR_INVALID_PARAMETER != VMTickMS(NULL)){
