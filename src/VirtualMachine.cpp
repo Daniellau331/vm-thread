@@ -108,13 +108,18 @@ extern "C"
         }
 
         //Mutex tick
-        for(int i=0;i<mutexes.size();i++){
-            if(!mutexes[i]->high_waiting_list.empty()){
-                for(int j=0;j<mutexes[i]->high_waiting_list.size();j++){
-                    TCB* i_thread =  mutexes[i]->high_waiting_list.front();
-                    if(i_thread->mutexTick!=-9999){
+        for (int i = 0; i < mutexes.size(); i++)
+        {
+            if (!mutexes[i]->high_waiting_list.empty())
+            {
+                for (int j = 0; j < mutexes[i]->high_waiting_list.size(); j++)
+                {
+                    TCB *i_thread = mutexes[i]->high_waiting_list.front();
+                    if (i_thread->mutexTick != -9999)
+                    {
                         i_thread->mutexTick--;
-                        if(i_thread->mutexTick == 0){
+                        if (i_thread->mutexTick == 0)
+                        {
                             mutexes[i]->high_waiting_list.pop_front();
                             i_thread->state = VM_THREAD_STATE_READY;
                             high_queue.push_back(i_thread);
@@ -123,12 +128,16 @@ extern "C"
                 }
             }
 
-            if(!mutexes[i]->normal_waiting_list.empty()){
-                for(int j=0;j<mutexes[i]->normal_waiting_list.size();j++){
-                    TCB* i_thread =  mutexes[i]->normal_waiting_list.front();
-                    if(i_thread->mutexTick!=-9999){
+            if (!mutexes[i]->normal_waiting_list.empty())
+            {
+                for (int j = 0; j < mutexes[i]->normal_waiting_list.size(); j++)
+                {
+                    TCB *i_thread = mutexes[i]->normal_waiting_list.front();
+                    if (i_thread->mutexTick != -9999)
+                    {
                         i_thread->mutexTick--;
-                        if(i_thread->mutexTick == 0){
+                        if (i_thread->mutexTick == 0)
+                        {
                             mutexes[i]->normal_waiting_list.pop_front();
                             i_thread->state = VM_THREAD_STATE_READY;
                             normal_queue.push_back(i_thread);
@@ -137,12 +146,16 @@ extern "C"
                 }
             }
 
-            if(!mutexes[i]->low_waiting_list.empty()){
-                for(int j=0;j<mutexes[i]->low_waiting_list.size();j++){
-                    TCB* i_thread =  mutexes[i]->low_waiting_list.front();
-                    if(i_thread->mutexTick!=-9999){
+            if (!mutexes[i]->low_waiting_list.empty())
+            {
+                for (int j = 0; j < mutexes[i]->low_waiting_list.size(); j++)
+                {
+                    TCB *i_thread = mutexes[i]->low_waiting_list.front();
+                    if (i_thread->mutexTick != -9999)
+                    {
                         i_thread->mutexTick--;
-                        if(i_thread->mutexTick == 0){
+                        if (i_thread->mutexTick == 0)
+                        {
                             mutexes[i]->low_waiting_list.pop_front();
                             i_thread->state = VM_THREAD_STATE_READY;
                             low_queue.push_back(i_thread);
@@ -150,8 +163,6 @@ extern "C"
                     }
                 }
             }
-
-
         }
 
         scheduler();
@@ -284,15 +295,16 @@ extern "C"
         // cout<<"Thread ID: "<<thread<<endl;
         // cout<<"allThread.size "<<allThread.size()<<endl;
 
-
-        if(!stateRef){
-            cout<<"stateRef == NULL"<<endl;
+        if (!stateRef)
+        {
+            cout << "stateRef == NULL" << endl;
             MachineResumeSignals(&sigstate);
             return VM_STATUS_ERROR_INVALID_PARAMETER;
         }
 
-        if(thread>allThread.size()){
-            cout<<"VM_STATUS_ERROR_INVALID_ID"<<endl;
+        if (thread > allThread.size())
+        {
+            cout << "VM_STATUS_ERROR_INVALID_ID" << endl;
             MachineResumeSignals(&sigstate);
             return VM_STATUS_ERROR_INVALID_ID;
         }
@@ -301,10 +313,11 @@ extern "C"
         //     cout<<"loop id: "<<i<<endl;
         // }
 
-
-        for(int i=0;i<allThread.size();i++){
+        for (int i = 0; i < allThread.size(); i++)
+        {
             // cout<<"loop id: "<<i<<endl;
-            if(allThread[i]->threadID == thread){
+            if (allThread[i]->threadID == thread)
+            {
                 // cout<<"found id == "<<thread<<endl;
                 *stateRef = allThread[i]->state;
                 MachineResumeSignals(&sigstate);
@@ -312,10 +325,9 @@ extern "C"
             }
         }
 
-        cout<<"VM_STATUS_ERROR_INVALID_ID"<<endl;
+        cout << "VM_STATUS_ERROR_INVALID_ID" << endl;
         MachineResumeSignals(&sigstate);
         return VM_STATUS_ERROR_INVALID_ID;
-
     }
 
     TVMStatus VMThreadSleep(TVMTick tick)
@@ -394,14 +406,18 @@ extern "C"
 
         // scheduler();
 
-        if(currentThread->threadID == thread){
+        if (currentThread->threadID == thread)
+        {
             currentThread->state = VM_THREAD_STATE_DEAD;
             scheduler();
         }
 
-        for(int i =0; i<allThread.size(); i++){
-            if(allThread[i]->threadID == thread){
-                if(allThread[i]->state == VM_THREAD_STATE_DEAD){
+        for (int i = 0; i < allThread.size(); i++)
+        {
+            if (allThread[i]->threadID == thread)
+            {
+                if (allThread[i]->state == VM_THREAD_STATE_DEAD)
+                {
                     MachineResumeSignals(&sigstate);
                     return VM_STATUS_ERROR_INVALID_STATE;
                 }
@@ -410,7 +426,6 @@ extern "C"
                 return VM_STATUS_SUCCESS;
             }
         }
-
 
         MachineResumeSignals(&sigstate);
 
@@ -421,7 +436,7 @@ extern "C"
     {
         MachineSuspendSignals(&sigstate);
 
-        cout<<"VMThreadActivate()"<<endl;
+        cout << "VMThreadActivate()" << endl;
 
         TCB *activatingThread = allThread[thread];
 
@@ -778,8 +793,8 @@ extern "C"
         Mutex *newMutex = new Mutex;
         //1: unlocked
         newMutex->state = 1;
-        mutexes.push_back(newMutex);
         newMutex->mutexID = mutexes.size();
+        mutexes.push_back(newMutex);
         newMutex->mutexRef = mutexref;
         *mutexref = newMutex->mutexID;
 
@@ -814,9 +829,14 @@ extern "C"
         MachineResumeSignals(&sigstate);
         return VM_STATUS_ERROR_INVALID_ID;
     }
+
     TVMStatus VMMutexQuery(TVMMutexID mutex, TVMThreadIDRef ownerref)
     {
         MachineSuspendSignals(&sigstate);
+
+        // cout << "mutex id:" << mutex << endl;
+        // cout << "mutex list size" << mutexes.size() << endl;
+
         if (!ownerref)
         {
             MachineResumeSignals(&sigstate);
@@ -825,17 +845,27 @@ extern "C"
 
         for (int i = 0; i < mutexes.size(); i++)
         {
+            // cout << "loop i" << i << endl;
+            // cout << "mutexes[i]->mutexID " << mutexes[i]->mutexID << endl;
             if (mutexes[i]->mutexID == mutex)
             {
-                ownerref = mutexes[i]->owner->threadIDRef;
+
+                if (mutexes[i]->owner)
+                {
+                    *ownerref = mutexes[i]->owner->threadID;
+                    MachineResumeSignals(&sigstate);
+                    return VM_STATUS_SUCCESS;
+                }
+
                 MachineResumeSignals(&sigstate);
                 return VM_STATUS_SUCCESS;
             }
         }
-
+        *ownerref = VM_THREAD_ID_INVALID;
         MachineResumeSignals(&sigstate);
         return VM_STATUS_ERROR_INVALID_ID;
     }
+
     TVMStatus VMMutexAcquire(TVMMutexID mutex, TVMTick timeout)
     {
         MachineSuspendSignals(&sigstate);
@@ -1008,16 +1038,20 @@ extern "C"
         return VM_STATUS_ERROR_INVALID_ID;
     }
 
-    TVMStatus VMThreadDelete(TVMThreadID thread){
+    TVMStatus VMThreadDelete(TVMThreadID thread)
+    {
         MachineSuspendSignals(&sigstate);
 
-        for(int i=0; i<allThread.size(); i++){
-            if(allThread[i]->threadID == thread){
-                if(allThread[i]->state !=  VM_THREAD_STATE_DEAD){
+        for (int i = 0; i < allThread.size(); i++)
+        {
+            if (allThread[i]->threadID == thread)
+            {
+                if (allThread[i]->state != VM_THREAD_STATE_DEAD)
+                {
                     MachineResumeSignals(&sigstate);
                     return VM_STATUS_ERROR_INVALID_STATE;
                 }
-                allThread.erase(allThread.begin()+i);
+                allThread.erase(allThread.begin() + i);
                 MachineResumeSignals(&sigstate);
                 return VM_STATUS_SUCCESS;
             }
